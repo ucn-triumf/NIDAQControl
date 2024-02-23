@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "NIDAQControl"
+version = '0.0.1'
+authors  = [{name="Derek Fujimoto", email="dfujimoto@triumf.ca" }]
+description = "Python API for NIDAQ devices used by the TUCAN collaboration."
+readme = "README.md"
+classifiers = [
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.10",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: POSIX :: Linux",
+]
+license = {file = "LICENSE"}
+requires-python = ">=3.7"
+dependencies = [
+    'numpy',
+    'matplotlib',
+    'pandas',
+    'nidaqmx',
+    'datetime',
+    'tqdm',
+    'time',
+    'os',
+]
+
+[project.urls]
+"Homepage" = "https://github.com/ucn-triumf/NIDAQControl"
+"Bug Tracker" = "https://github.com/ucn-triumf/NIDAQControl/issues"
