@@ -101,12 +101,6 @@ class USB6281(object):
         """
 
         # set channels
-        if self.ai is not None and ai is None:
-            self._taski.close()
-
-        if self.ao is not None and ai is None:
-            self._taski.close()
-
         self.ai = ai
         self.ao = ao
 
@@ -175,7 +169,6 @@ class USB6281(object):
         # setup output callback
         self._tasko.register_every_n_samples_transferred_from_buffer_event(self._samples_per_frame,
                                                                            self._write_task_callback)
-
 
     def __enter__(self):
         return self
@@ -306,7 +299,7 @@ class USB6281(object):
             self._output_voltages.append(signal)
 
         # write signal to device
-        self._stream_out.write_many_sample(signal, timeout=1)
+        self._stream_out.write_many_sample(signal,  timeout=1)
 
         # Absolutely needed for this callback to be well defined (see nidaqmx doc).
         return 0
@@ -373,13 +366,13 @@ class USB6281(object):
         plt.legend(fontsize='x-small')
         plt.tight_layout()
 
-    def run(self, duration, draw_s=0, sample_freq=1, save_ao=False, draw_ch_top=None):
+    def run(self, duration, draw_s=0, sample_freq=None, save_ao=False, draw_ch_top=None):
         """Take data, inputs are sine parameters
 
         Args:
             duration (int): run duration in seconds
             draw_s (int):   if > 0, draw while in progress the last self._draw_s seconds
-            sample_freq (int): frequency of sampling in Hz (down-sampled in software from clock_freq)
+            sample_freq (float): frequency of sampling in Hz (down-sampled in software from clock_freq). If None, sample at clock_freq.
             save_ao (bool): if true, save signal output for later draw. May crash the run
                             if too long, very memory intensive and append gets slow at long list lengths
             draw_ch_top (str): which channel to draw on top of the others, can be partial name
@@ -393,11 +386,12 @@ class USB6281(object):
         self._draw_s = draw_s
 
         duration = int(duration)
-        sample_freq = int(sample_freq)
+
+        if sample_freq is None:
+            sample_freq = self._clock_freq
 
         # get generator for output signal
-        if self._len_ao:
-            self.signal_generator = {ch: self._make_signal_generator(fn) for ch, fn in self.ao.items()}
+        self.signal_generator = {ch: self._make_signal_generator(fn) for ch, fn in self.ao.items()}
 
         # data to output to ao
         self._output_voltages = []
@@ -408,6 +402,12 @@ class USB6281(object):
         # downsampling parameters
         self._downsample = int(self._clock_freq / sample_freq)
         self._len_buffer = int(np.ceil(self._samples_per_channel / self._downsample)) # length after downsample
+
+        # check downsample
+        if self._downsample > self._samples_per_channel:
+            raise RuntimeError('Buffer size too small for such a slow sampling frequency. '+\
+                               'Increase samples_per_channel or sample_freq')
+
 
         # calculate total length of output array
         total_len = duration * sample_freq
@@ -427,9 +427,8 @@ class USB6281(object):
         self._ydata = np.zeros((self._len_ai, ndraw))
 
         # initial fill of empty buffer (required else error)
-        if self._len_ao:
-            for _ in range(self._frames_per_buffer):
-                self._write_task_callback(None, None, None, None)
+        for _ in range(self._frames_per_buffer):
+            self._write_task_callback(None, None, None, None)
 
         # start figure for drawing
         if self._draw_s > 0:
@@ -456,7 +455,7 @@ class USB6281(object):
 
         # start tasks (begin run)
         self._taski.start()
-        if self._len_ao: self._tasko.start()
+        self._tasko.start()
 
         # setup progress bar
         time_start = time.time()
@@ -486,9 +485,8 @@ class USB6281(object):
         except Exception as err:
             self._taski.stop()
             self._taski.close()
-            if self._len_ao:
-                self._tasko.stop()
-                self._tasko.close()
+            self._tasko.stop()
+            self._tasko.close()
             raise err from None
 
         # set output to zero and stop task
@@ -496,9 +494,8 @@ class USB6281(object):
             self._stream_out.write_many_sample(np.zeros((self._len_ao, self._samples_per_frame)), timeout=1)
         self._taski.stop()
         self._taski.close()
-        if self._len_ao:
-            self._tasko.stop()
-            self._tasko.close()
+        self._tasko.stop()
+        self._tasko.close()
 
         # reassign data to dataframe
         self.df = pd.DataFrame({f'ai{ch}':self._data[i] for i, ch in enumerate(self.ai.keys())})

@@ -26,7 +26,9 @@ See [documentation index here](docs/NIDAQControl/index.md)
 
 ## Examples
 
-Read data
+### Read data
+
+When no analog output is specified, default to output 0 V on `ao0`.
 
 ```python
 from NIDAQControl import USB6281
@@ -52,7 +54,9 @@ u.run(  duration = 10, # run for this many seconds
 u.to_csv() # write to file with default filename
 ```
 
-Write data
+### Write data
+
+When no analog input is specified, default to reading `ai0`. Decrease sample rate for long output runs.
 
 ```python
 from NIDAQControl import USB6281
@@ -66,15 +70,13 @@ u = USB6281()
 # function is a python function which takes as only input time
 u.setup(ao = {  0: lambda time : 3,  # output a constant 3V
                 1: lambda time : time % 2  # sawtooth from 0 to 1 with a period of 2 seconds
-             })
+              })
 
 # run
-u.run(  duration = 5, # run for this many seconds
-     )
-
+u.run(duration = 10) # run for this many seconds
 ```
 
-Read and write data
+### Read and write data
 
 ```python
 from NIDAQControl import USB6281
