@@ -1,5 +1,8 @@
 # NIDAQ Control
 
+<img src="https://img.shields.io/github/languages/top/ucn-triumf/NIDAQControl?style=flat-square"/> <img src="https://img.shields.io/github/languages/code-size/ucn-triumf/NIDAQControl?style=flat-square"/>  <img src="https://img.shields.io/github/last-commit/ucn-triumf/NIDAQControl?style=flat-square"/>
+
+
 Python API for NIDAQ devices used by the TUCAN collaboration.
 
 ## Installation
