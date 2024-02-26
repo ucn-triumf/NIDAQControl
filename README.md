@@ -7,6 +7,8 @@ Python API for NIDAQ devices used by the TUCAN collaboration.
 
 ## Installation
 
+You need to first install the NI-DAQmx drivers from [their webpage](https://www.ni.com/en/support/downloads/drivers/download.ni-daq-mx.html#521556).
+
 Clone this directory then execute the following:
 
 ```
