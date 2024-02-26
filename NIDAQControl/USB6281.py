@@ -110,65 +110,72 @@ class USB6281(object):
         self.ai = ai
         self.ao = ao
 
-        # setup input tasks
-        if self.ai is not None:
+        # must always read back at least one channel
+        if self.ai is None:
+            self.ai = {0: 'default readback'}
 
-            # number of channels
-            self._len_ai = len(self.ai.keys())
+        # must always output one channel
+        if self.ao is None:
+            self.ao = {0: lambda x: 0}
 
-            # task
-            self._taski = ni.Task()
+        # setup output tasks -----------------------------------------------
 
-            # setup channels
-            for ch in self.ai.keys():
-                self._taski.ai_channels.add_ai_voltage_chan(f"{self._device_name}/ai{ch}",
-                                                           **self._ai_args )
+        # number of channels
+        self._len_ai = len(self.ai.keys())
 
-            # set terminal configuation
-            self._taski.ai_channels.all.ai_term_cfg = self._terminal_config
+        # task
+        self._taski = ni.Task()
 
-            # setup clocks
-            self._taski.timing.cfg_samp_clk_timing(rate = self._clock_freq,
-                                         source = f'/{self._device_name}/ao/SampleClock',
-                                         sample_mode = ni.constants.AcquisitionType.CONTINUOUS,
-                                         samps_per_chan = self._samples_per_channel)
+        # setup channels
+        for ch in self.ai.keys():
+            self._taski.ai_channels.add_ai_voltage_chan(f"{self._device_name}/ai{ch}",
+                                                       **self._ai_args )
 
-            # get stream
-            self._stream_in = stream_readers.AnalogMultiChannelReader(self._taski.in_stream)
+        # set terminal configuation
+        self._taski.ai_channels.all.ai_term_cfg = self._terminal_config
 
-            # setup reading callback
-            # read data when n samples are placed into the buffer
-            self._taski.register_every_n_samples_acquired_into_buffer_event(self._samples_per_channel,
-                                                                            self._read_task_callback)
+        # setup clocks
+        self._taski.timing.cfg_samp_clk_timing(rate = self._clock_freq,
+                                     source = f'/{self._device_name}/ao/SampleClock',
+                                     sample_mode = ni.constants.AcquisitionType.CONTINUOUS,
+                                     samps_per_chan = self._samples_per_channel)
 
-        # setup output tasks
-        if self.ao is not None:
+        # get stream
+        self._stream_in = stream_readers.AnalogMultiChannelReader(self._taski.in_stream)
 
-            # number of channels
-            self._len_ao = len(self.ao.keys())
+        # setup reading callback
+        # read data when n samples are placed into the buffer
+        self._taski.register_every_n_samples_acquired_into_buffer_event(self._samples_per_channel,
+                                                                        self._read_task_callback)
 
-            # task
-            self._tasko = ni.Task()
+        # setup output tasks -----------------------------------------------
 
-            # setup channels
-            for ch in self.ao.keys():
-                self._tasko.ao_channels.add_ao_voltage_chan(f"{self._device_name}/ao{ch}",
-                                                       **self._ao_args)
+        # number of channels
+        self._len_ao = len(self.ao.keys())
 
-            # clock
-            self._tasko.timing.cfg_samp_clk_timing(rate = self._clock_freq,
-                                         sample_mode = ni.constants.AcquisitionType.CONTINUOUS,
-                                         samps_per_chan = self._samples_per_channel)
+        # task
+        self._tasko = ni.Task()
 
-            # stream
-            self._stream_out = stream_writers.AnalogMultiChannelWriter(self._tasko.out_stream)
+        # setup channels
+        for ch in self.ao.keys():
+            self._tasko.ao_channels.add_ao_voltage_chan(f"{self._device_name}/ao{ch}",
+                                                   **self._ao_args)
 
-            # setup output buffer
-            self._tasko.out_stream.output_buf_size = self._clock_freq
+        # clock
+        self._tasko.timing.cfg_samp_clk_timing(rate = self._clock_freq,
+                                     sample_mode = ni.constants.AcquisitionType.CONTINUOUS,
+                                     samps_per_chan = self._samples_per_channel)
 
-            # setup output callback
-            self._tasko.register_every_n_samples_transferred_from_buffer_event(self._samples_per_frame,
-                                                                               self._write_task_callback)
+        # stream
+        self._stream_out = stream_writers.AnalogMultiChannelWriter(self._tasko.out_stream)
+
+        # setup output buffer
+        self._tasko.out_stream.output_buf_size = self._clock_freq
+
+        # setup output callback
+        self._tasko.register_every_n_samples_transferred_from_buffer_event(self._samples_per_frame,
+                                                                           self._write_task_callback)
+
 
     def __enter__(self):
         return self
@@ -224,7 +231,15 @@ class USB6281(object):
 
         # generate voltages for ever and ever
         while True:
-            yield fn_handle(self._timebase_ao+phase)
+
+            # call the function
+            output = fn_handle(self._timebase_ao+phase)
+
+            # handle single value return types
+            if type(output) in (int, float, np.float64):
+                output = np.full(self._timebase_ao.shape, output, dtype=np.float64)
+
+            yield output
             phase += phase_step
 
     def _read_task_callback(self, task_handle, every_n_samples_event_type,
@@ -283,7 +298,8 @@ class USB6281(object):
         """
 
         # generate signal
-        signal = np.array([next(self.signal_generator[ch]) for ch in self.ao.keys()])
+        signal = np.array([next(self.signal_generator[ch]) for ch in self.ao.keys()],
+                          dtype=np.float64)
 
         # save signal for debugging
         if self._save_ao:
@@ -342,8 +358,6 @@ class USB6281(object):
 
         # get data from lists
         ao_data = np.hstack(self._output_voltages)
-        # for i in range(len(self._output_voltages[0])):
-            # ao_data.append(np.concatenate([s[i] for s in self._output_voltages]))
 
         # time stamps
         x = np.arange(len(ao_data[0]))/self._clock_freq
@@ -382,7 +396,8 @@ class USB6281(object):
         sample_freq = int(sample_freq)
 
         # get generator for output signal
-        self.signal_generator = {ch: self._make_signal_generator(fn) for ch, fn in self.ao.items()}
+        if self._len_ao:
+            self.signal_generator = {ch: self._make_signal_generator(fn) for ch, fn in self.ao.items()}
 
         # data to output to ao
         self._output_voltages = []
@@ -412,8 +427,9 @@ class USB6281(object):
         self._ydata = np.zeros((self._len_ai, ndraw))
 
         # initial fill of empty buffer (required else error)
-        for _ in range(self._frames_per_buffer):
-            self._write_task_callback(None, None, None, None)
+        if self._len_ao:
+            for _ in range(self._frames_per_buffer):
+                self._write_task_callback(None, None, None, None)
 
         # start figure for drawing
         if self._draw_s > 0:
@@ -440,7 +456,7 @@ class USB6281(object):
 
         # start tasks (begin run)
         self._taski.start()
-        self._tasko.start()
+        if self._len_ao: self._tasko.start()
 
         # setup progress bar
         time_start = time.time()
@@ -468,17 +484,24 @@ class USB6281(object):
 
         # if error, close task nicely
         except Exception as err:
+            self._taski.stop()
             self._taski.close()
-            self._tasko.close()
+            if self._len_ao:
+                self._tasko.stop()
+                self._tasko.close()
             raise err from None
 
         # set output to zero and stop task
-        self._stream_out.write_many_sample(np.zeros((self._len_ao, self._samples_per_frame)), timeout=1)
+        for _ in range(self._frames_per_buffer):
+            self._stream_out.write_many_sample(np.zeros((self._len_ao, self._samples_per_frame)), timeout=1)
         self._taski.stop()
-        self._tasko.stop()
+        self._taski.close()
+        if self._len_ao:
+            self._tasko.stop()
+            self._tasko.close()
 
         # reassign data to dataframe
-        self.df = pd.DataFrame({ch:self._data[i] for i, ch in enumerate(self.ai.keys())})
+        self.df = pd.DataFrame({f'ai{ch}':self._data[i] for i, ch in enumerate(self.ai.keys())})
         self.df.index /= sample_freq
         self.df.index.name = 'time (s)'
 
@@ -530,14 +553,6 @@ class USB6281(object):
 
         print(f'\nSaved file as {path}')
 
-# # test
-# u = USB6281(samples_per_channel=1e4)
-# u.setup(ai={i:i for i in range(4)},
-# # u.setup(ai={1:1},
-#         ao={0: lambda x: np.sin(2*np.pi*x),
-#             1: lambda x: np.sin(2*np.pi*10*x)})
-# u.run(2, 2, 10000, save_ao=True)
-# u.close()
 
 
 

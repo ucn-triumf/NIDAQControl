@@ -50,7 +50,6 @@ u.run(  duration = 10, # run for this many seconds
      )
 
 u.to_csv() # write to file with default filename
-u.close() # close connections to the NIDAQ nicely
 ```
 
 Write data
@@ -65,7 +64,7 @@ u = USB6281()
 # pattern: ch : function
 # where ch is the channel number (i.e. 0 = ao0) and
 # function is a python function which takes as only input time
-u.setup(ao = {  0: lambda time : 3  # output a constant 3V
+u.setup(ao = {  0: lambda time : 3,  # output a constant 3V
                 1: lambda time : time % 2  # sawtooth from 0 to 1 with a period of 2 seconds
              })
 
@@ -73,7 +72,6 @@ u.setup(ao = {  0: lambda time : 3  # output a constant 3V
 u.run(  duration = 5, # run for this many seconds
      )
 
-u.close() # close connections to the NIDAQ nicely
 ```
 
 Read and write data
@@ -85,8 +83,7 @@ from NIDAQControl import USB6281
 u = USB6281()
 
 # setup connections
-u.setup(ao = {  0: lambda time : np.sin(2*np.pi*10*time)  # output a 10 Hz sine wave
-             }
+u.setup(ao = {0: lambda time : np.sin(2*np.pi*10*time)},  # output a 10 Hz sine wave
         ai = {0: "Output from ao0"})
 
 # run
@@ -101,5 +98,5 @@ u.to_csv('test.csv',
          note1 = "Testing",
          connections = "ai0 connected to ao0",
          fdskjlksdfnsd = "Use your own keywords")
-u.close() # close connections to the NIDAQ nicely
 ```
+
