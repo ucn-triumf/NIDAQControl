@@ -374,9 +374,9 @@ class USB6281(object):
         plt.legend(fontsize='x-small')
         plt.tight_layout()
 
-    def reset_signal_filters(self):
+    def reset_ters(self):
         """Reset all signal filters"""
-        self.signal_filters = []
+        self.ters = []
 
     def run(self, duration, draw_s=0, sample_freq=None, save_ao=False, draw_ch_top=None):
         """Take data, inputs are sine parameters
@@ -524,7 +524,7 @@ class USB6281(object):
             bandstop (bool): if True, set bandstop instead of bandpass if both low and high set
 
         Returns
-            None, saved to self.signal_filter
+            None, saved to self.signal_filters
         """
 
         # update limits
@@ -551,7 +551,7 @@ class USB6281(object):
            filter_type = 'bandstop'
 
         # set filter (applied as y = sosfilt(sos, y))
-        self.signal_filter.append(butter(order, Wn, btype=filter_type, analog=False, output='sos'))
+        self.signal_filters.append(butter(order, Wn, btype=filter_type, analog=False, output='sos'))
 
     def to_csv(self, path=None, **notes):
         """Write data to file specified by path
