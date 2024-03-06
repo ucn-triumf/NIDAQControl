@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import nidaqmx as ni
 from tqdm import tqdm, TqdmWarning
 from datetime import datetime
+from scipy.signal import butter, sosfiltfilt
 import os, time
 
 from nidaqmx import stream_readers
@@ -36,6 +37,7 @@ class USB6281(object):
         ai (dict): saved inputs from setup
         ao (dict): saved inputs from setup
         df (pd.DataFrame): data saved from ai channels
+        signal_filters (list): list of second-order section filters corresponding to a butterworth filter. Applied in order.
         signal_generator (dict): dictionary of generators to set the voltages of the NIDAQ
     """
 
@@ -86,6 +88,7 @@ class USB6281(object):
         # defaults
         self.ai = None
         self.ao = None
+        self.signal_filters = []
 
         # timesteps from t=0 for output functions
         self._timebase_ao = np.arange(self._samples_per_frame, dtype=np.float64) / self._clock_freq
@@ -255,6 +258,11 @@ class USB6281(object):
                                         number_of_samples,
                                         timeout=ni.constants.WAIT_INFINITELY)
 
+        # filter
+        # if filter errors are persistent for ends try saving the prev buffer and using that to absorb the deficiencies
+        for sos in self.signal_filters:
+            self._buffer_in = sosfiltfilt(sos, self._buffer_in, padtype='even')
+
         # downsample buffer
         buffer_down = self._buffer_in[:, ::self._downsample]
 
@@ -366,6 +374,10 @@ class USB6281(object):
         plt.legend(fontsize='x-small')
         plt.tight_layout()
 
+    def reset_signal_filters(self):
+        """Reset all signal filters"""
+        self.signal_filters = []
+
     def run(self, duration, draw_s=0, sample_freq=None, save_ao=False, draw_ch_top=None):
         """Take data, inputs are sine parameters
 
@@ -407,7 +419,6 @@ class USB6281(object):
         if self._downsample > self._samples_per_channel:
             raise RuntimeError('Buffer size too small for such a slow sampling frequency. '+\
                                'Increase samples_per_channel or sample_freq')
-
 
         # calculate total length of output array
         total_len = duration * sample_freq
@@ -501,6 +512,46 @@ class USB6281(object):
         self.df = pd.DataFrame({f'ai{ch}':self._data[i] for i, ch in enumerate(self.ai.keys())})
         self.df.index /= sample_freq
         self.df.index.name = 'time (s)'
+
+    def set_filter(self, low=None, high=None, order=6, bandstop=False):
+        """Make a butterworth filter which is applied to the readback signal prior to downsampling.
+        If low only: low pass filter. If high only, high pass filter. If both, band pass filter.
+
+        Args:
+            low (float): lower bound cutoff frequency in Hz
+            high (float): upper bound cutoff frequency in Hz
+            order (int): filter order
+            bandstop (bool): if True, set bandstop instead of bandpass if both low and high set
+
+        Returns
+            None, saved to self.signal_filter
+        """
+
+        # update limits
+        nyq = 0.5 * self._clock_freq
+        filter_type = None
+
+        if low is not None:
+            low = low / nyq
+            filter_type = 'lowpass'
+            Wn = low
+
+        if high is not None:
+            high = high / nyq
+
+            if filter_type is None:
+                filter_type = 'highpass'
+                Wn = high
+            else:
+                filter_type = 'bandpass'
+                Wn = (low, high)
+
+        # check if bandstop
+        if filter_type == 'bandpass' and bandstop:
+           filter_type = 'bandstop'
+
+        # set filter (applied as y = sosfilt(sos, y))
+        self.signal_filter.append(butter(order, Wn, btype=filter_type, analog=False, output='sos'))
 
     def to_csv(self, path=None, **notes):
         """Write data to file specified by path

@@ -76,7 +76,7 @@ u.setup(ao = {  0: lambda time : 3,  # output a constant 3V
 u.run(duration = 10) # run for this many seconds
 ```
 
-### Read and write data
+### Read and write data with signal filtering
 
 ```python
 from NIDAQControl import USB6281
@@ -88,6 +88,12 @@ u = USB6281()
 u.setup(ao = {0: lambda time : np.sin(2*np.pi*10*time)},  # output a 10 Hz sine wave
         ai = {0: "Output from ao0"})
 
+# setup various filters (they are all applied in sequence)
+u.set_filter(low = 2000)  # low pass
+u.set_filter(high = 1)  # high pass
+u.set_filter(low = 50, high = 1000)  # band pass
+u.set_filter(low = 100, high = 120, bandstop=True)  # band stop
+
 # run
 u.run(  duration = 5, # run for this many seconds
         draw_s = 5,
@@ -96,9 +102,6 @@ u.run(  duration = 5, # run for this many seconds
 
 # write to file with specified filename and some notes
 # note keywords are arbitrary
-u.to_csv('test.csv',
-         note1 = "Testing",
-         connections = "ai0 connected to ao0",
-         fdskjlksdfnsd = "Use your own keywords")
+u.to_csv('test.csv')
 ```
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "NIDAQControl"
-version = '0.0.1'
+version = '0.1.0'
 authors  = [{name="Derek Fujimoto", email="dfujimoto@triumf.ca" }]
 description = "Python API for NIDAQ devices used by the TUCAN collaboration."
 readme = "README.md"
@@ -20,6 +20,7 @@ dependencies = [
     'numpy',
     'matplotlib',
     'pandas',
+    'scipy',
     'nidaqmx',
     'datetime',
     'tqdm',
