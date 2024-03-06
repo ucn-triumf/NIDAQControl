@@ -260,11 +260,12 @@ class USB6281(object):
 
         # filter
         # if filter errors are persistent for ends try saving the prev buffer and using that to absorb the deficiencies
+        buffer = self._buffer_in
         for sos in self.signal_filters:
-            self._buffer_in = sosfiltfilt(sos, self._buffer_in, padtype='even')
+            buffer = sosfiltfilt(sos, buffer, padtype='even')
 
         # downsample buffer
-        buffer_down = self._buffer_in[:, ::self._downsample]
+        buffer_down = buffer[:, ::self._downsample]
 
         # save data
         i = self._nbuffers_read
@@ -374,9 +375,9 @@ class USB6281(object):
         plt.legend(fontsize='x-small')
         plt.tight_layout()
 
-    def reset_ters(self):
+    def reset_filters(self):
         """Reset all signal filters"""
-        self.ters = []
+        self.signal_filters = []
 
     def run(self, duration, draw_s=0, sample_freq=None, save_ao=False, draw_ch_top=None):
         """Take data, inputs are sine parameters
