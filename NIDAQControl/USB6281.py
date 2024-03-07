@@ -201,7 +201,11 @@ class USB6281(object):
         return data
 
     def _draw_in_progress(self):
-        """Update a figure while the run is ongoing"""
+        """Update a figure while the run is ongoing
+
+        Returns:
+            bool: True if continue drawing, else close connection to nidaq and halt
+        """
 
         # get obj
         fig = self._ax.figure
@@ -238,13 +242,11 @@ class USB6281(object):
         self._ax.set_ylim((ylim_low, ylim_high))
 
         # update canvas
-        try:
-            fig.canvas.draw()
-            fig.canvas.flush_events()
-        except RuntimeError:
-            self.close()
-            return True
-        return False
+        fig.canvas.draw()
+        fig.canvas.flush_events()
+
+        # check if window is still up, if not stop operation
+        return plt.fignum_exists(self._ax.figure.number)
 
     def _make_signal_generator(self, fn_handle):
         """Makes a function which yields voltages for each of the analog output channels
@@ -549,7 +551,7 @@ class USB6281(object):
 
                 # update figure
                 if self._draw_s > 0 and self._nbuffers_read > nbuffers_read:
-                    if self._draw_in_progress():
+                    if not self._draw_in_progress():
                         break
                     nbuffers_read = self._nbuffers_read
 
