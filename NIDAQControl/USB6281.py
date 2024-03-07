@@ -28,7 +28,6 @@ mpl.rcParams['axes.spines.left'] = True
 mpl.rcParams['axes.spines.right'] = True
 mpl.rcParams['axes.spines.top'] = True
 mpl.rcParams['axes.spines.bottom'] = True
-#mpl.rcParams['agg.path.chunksize'] = 200
 
 class USB6281(object):
     """Read and set values on analog channels of NI USB 6281 DAQ.
