@@ -206,28 +206,18 @@ class USB6281(object):
         # get obj
         fig = self._ax.figure
 
+        # downsample only if filtering
+        downsmpl = self._downsample if self.do_filter else 1
+
         # update data indexes
         i = self._nbuffers_read*self._len_buffer
-
-        if self.do_filter:
-            i_start = max(i//self.do_filter-self._ydata.shape[1], 0)
-        else:
-            i_start = max(i-self._ydata.shape[1], 0)
+        i_start = max(i-self._ydata.shape[1]*downsmpl, 0)
 
         # get data to copy, trim, filter
         data = self._filter(self._data[:, :i])
 
-        # downsample only if filtering, then copy
-        if self.do_filter:
-            data = data[:, ::self._downsample]
-            data = data[:, i_start:]
-            self._ydata[:, i_start-i//self._downsample:] = data
-        else:
-            data = data[:, i_start:]
-            self._ydata[:, i_start-i:] = data
-
         # copy data
-        # self._ydata[:, i_start-i:] = data
+        self._ydata[:, (i_start-i)//downsmpl:] = data[:, i_start::downsmpl]
 
         # set data
         for y, line in zip(self._ydata, self._ax.lines):
@@ -245,10 +235,6 @@ class USB6281(object):
         if not (ylim_high > ylim[1] or ylim_high < ylim[1] - abs(ylim[1])* 0.1):
             ylim_high = ylim[1]
         else:
-            ylim_high *= 1.01
-
-        if ylim_low == ylim_high:
-            ylim_low *= 0.99
             ylim_high *= 1.01
 
         self._ax.set_ylim((ylim_low, ylim_high))
@@ -491,7 +477,10 @@ class USB6281(object):
                                 'Increase samples_per_channel or sample_freq')
 
         # calculate total length of output array
-        total_len = duration * sample_freq
+        if self.do_filter:
+            total_len = duration * self._clock_freq
+        else:
+            total_len = duration * sample_freq
         nbuffers_toread = int(np.ceil(total_len / self._len_buffer))
 
         # ensure that length of final data is set properly - account for rounding errors
