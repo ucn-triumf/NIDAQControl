@@ -89,6 +89,7 @@ class USB6281(object):
         self.ai = None
         self.ao = None
         self.signal_filters = []
+        self.do_filter = False
 
         # timesteps from t=0 for output functions
         self._timebase_ao = np.arange(self._samples_per_frame, dtype=np.float64) / self._clock_freq
@@ -179,6 +180,26 @@ class USB6281(object):
     def __exit__(self, type, value, traceback):
         self.close()
 
+    def _filter(self, data):
+        """Filter an array
+
+        Args:
+            data (array): array to filter
+        Returns:
+            array: with signal filters applied
+        """
+
+        # trivial end
+        if not self.do_filter:
+            return data
+
+        # apply filters
+        data = np.copy(data)
+        for sos in self.signal_filters:
+            data = sosfiltfilt(sos, data, padtype='even')
+
+        return data
+
     def _draw_in_progress(self):
         """Update a figure while the run is ongoing"""
 
@@ -189,13 +210,18 @@ class USB6281(object):
         i = self._nbuffers_read*self._len_buffer
         i_start = max(i-self._ydata.shape[1], 0)
 
+        # get data to copy, filter, and downsample
+        data = self._filter(self._data)
+        data = data[:, i_start:i:self._downsample]
+
         try:
-            self._ydata[:, i_start-i:] = self._data[:, i_start:i]
+            # copy data
+            self._ydata[:, i_start-i:] = data
 
         # assumed reason for error is that we're at end of data array
         except ValueError:
-            len_to_add = len((self._data[:, i_start:i])[0])
-            self._ydata[:, -len_to_add:] = self._data[:, i_start:i]
+            len_to_add = len((data)[0])
+            self._ydata[:, -len_to_add:] = data
 
         # set data
         for y, line in zip(self._ydata, self._ax.lines):
@@ -258,13 +284,11 @@ class USB6281(object):
                                         number_of_samples,
                                         timeout=ni.constants.WAIT_INFINITELY)
 
-        # filter
-        # if filter errors are persistent for ends try saving the prev buffer and using that to absorb the deficiencies
-        for sos in self.signal_filters:
-            self._buffer_in = sosfiltfilt(sos, self._buffer_in, padtype='even')
-
-        # downsample buffer
-        buffer_down = self._buffer_in[:, ::self._downsample]
+        # downsample buffer only if not filtering
+        if self.do_filter:
+            buffer_down = self._buffer_in
+        else:
+            buffer_down = self._buffer_in[:, ::self._downsample]
 
         # save data
         i = self._nbuffers_read
@@ -317,7 +341,7 @@ class USB6281(object):
         self._taski.close()
         self._tasko.close()
 
-    def draw_data(self, cols=None, **df_plot_kw):
+    def draw_data(self, cols=None, filter=False, downsample=False, **df_plot_kw):
         """Draw data in axis
 
         Args:
@@ -327,6 +351,18 @@ class USB6281(object):
         Returns:
             None, draws data to figure
         """
+
+        # copy
+        df = self.df.copy()
+        
+        # filter
+        if filter:
+            for c in df.columns:
+                df.loc[:, c] = self.filter(df.loc[:, c])
+        
+        # downsample
+        if downsample:
+                
 
         if cols is not None:
             self.df[cols].plot(**df_plot_kw)
@@ -374,9 +410,10 @@ class USB6281(object):
         plt.legend(fontsize='x-small')
         plt.tight_layout()
 
-    def reset_ters(self):
+    def reset_filters(self):
         """Reset all signal filters"""
-        self.ters = []
+        self.signal_filters = []
+        self.do_filter = False
 
     def run(self, duration, draw_s=0, sample_freq=None, save_ao=False, draw_ch_top=None):
         """Take data, inputs are sine parameters
@@ -413,12 +450,17 @@ class USB6281(object):
 
         # downsampling parameters
         self._downsample = int(self._clock_freq / sample_freq)
-        self._len_buffer = int(np.ceil(self._samples_per_channel / self._downsample)) # length after downsample
 
-        # check downsample
-        if self._downsample > self._samples_per_channel:
-            raise RuntimeError('Buffer size too small for such a slow sampling frequency. '+\
-                               'Increase samples_per_channel or sample_freq')
+        # length after downsample (only if not filtering)
+        if self.do_filter:
+            self._len_buffer = int(np.ceil(self._samples_per_channel))
+        else:
+            self._len_buffer = int(np.ceil(self._samples_per_channel / self._downsample))
+
+            # check downsample
+            if self._downsample > self._samples_per_channel:
+                raise RuntimeError('Buffer size too small for such a slow sampling frequency. '+\
+                                'Increase samples_per_channel or sample_freq')
 
         # calculate total length of output array
         total_len = duration * sample_freq
@@ -552,6 +594,7 @@ class USB6281(object):
 
         # set filter (applied as y = sosfilt(sos, y))
         self.signal_filters.append(butter(order, Wn, btype=filter_type, analog=False, output='sos'))
+        self.do_filter = True
 
     def to_csv(self, path=None, **notes):
         """Write data to file specified by path
@@ -563,6 +606,13 @@ class USB6281(object):
         Returns:
             None, writes to file
         """
+
+        # filter and downsample data
+        data = self.df.copy()
+        if self.do_filter:
+            for c in data.columns:
+                data.loc[:, c] = self._filter(data.loc[:, c])
+            data = data.loc[::self._downsample]
 
         # generate default filename
         if path is None:
@@ -597,7 +647,8 @@ class USB6281(object):
         with open(path, 'w') as fid:
             fid.write('\n'.join(header))
 
-        self.df.to_csv(path, mode='a', index=True)
+        # write data to file
+        data.to_csv(path, mode='a', index=True)
 
         print(f'\nSaved file as {path}')
 
