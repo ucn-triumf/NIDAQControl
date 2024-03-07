@@ -215,8 +215,6 @@ class USB6281(object):
 
         # get data to copy, trim, filter
         data = self._filter(self._data[:, :i])
-
-        # copy data
         self._ydata[:, (i_start-i)//downsmpl:] = data[:, i_start::downsmpl]
 
         # set data
@@ -226,16 +224,16 @@ class USB6281(object):
         # set limits not too frequently
         ylim_low = np.min(self._ydata)
         ylim = self._ax.get_ylim()
-        if not (ylim_low < ylim[0] or ylim_low > ylim[0] + abs(ylim[0])* 0.1):
+        if not (ylim_low < ylim[0] or ylim_low > ylim[0] + abs(ylim[0]) * 0.1):
             ylim_low = ylim[0]
         else:
-            ylim_low *= 0.99
+            ylim_low *= 0.9
 
         ylim_high = np.max(self._ydata)
-        if not (ylim_high > ylim[1] or ylim_high < ylim[1] - abs(ylim[1])* 0.1):
+        if not (ylim_high > ylim[1] or ylim_high < ylim[1] - abs(ylim[1]) * 0.1):
             ylim_high = ylim[1]
         else:
-            ylim_high *= 1.01
+            ylim_high *= 1.1
 
         self._ax.set_ylim((ylim_low, ylim_high))
 
@@ -354,12 +352,15 @@ class USB6281(object):
         self._tasko.stop()
         self._tasko.close()
 
-    def draw_data(self, cols=None, do_filter=False, do_downsample=False, **df_plot_kw):
+    def draw_data(self, cols=None, do_filter=True, do_downsample=True, **df_plot_kw):
         """Draw data in axis
 
         Args:
             cols (list): list of column names (str) to draw. If none, draw all
+            do_filter (bool): if true, if there is a filter, then apply it before drawing
+            do_downsample (bool): if true, apply downsampling before drawing (if no filtering, this option forced True)
             df_plot_kw: keywords to pass to pd.DataFrame.plot
+
 
         Returns:
             None, draws data to figure
@@ -369,12 +370,12 @@ class USB6281(object):
         df = self.df.copy()
 
         # filter
-        if do_filter:
+        if self.do_filter and do_filter:
             for c in df.columns:
                 df[c] = self._filter(df[c])
 
         # downsample
-        if do_downsample:
+        if self.do_filter and do_downsample:
             df = df.loc[::self._downsample]
 
         if cols is not None:
@@ -608,11 +609,13 @@ class USB6281(object):
         self.signal_filters.append(butter(order, Wn, btype=filter_type, analog=False, output='sos'))
         self.do_filter = True
 
-    def to_csv(self, path=None, **notes):
+    def to_csv(self, path=None, do_filtering=True, do_downsample=True, **notes):
         """Write data to file specified by path
 
         Args:
             path (str): if None, generate default filename (nidaq_usb6281_yymmddThhmmss.csv), else write csv to this path
+            do_filter (bool): if true, if there is a filter, then apply it before saving
+            do_downsample (bool): if true, apply downsampling before saving (if no filtering, this option forced True)
             notes: kwargs to write to file header, but takes general input. Saves as key: value in csv file header
 
         Returns:
@@ -621,9 +624,11 @@ class USB6281(object):
 
         # filter and downsample data
         data = self.df.copy()
-        if self.do_filter:
+        if self.do_filter and do_filtering:
             for c in data.columns:
                 data.loc[:, c] = self._filter(data.loc[:, c])
+
+        if self.do_filter and do_downsample:
             data = data.loc[::self._downsample]
 
         # generate default filename
