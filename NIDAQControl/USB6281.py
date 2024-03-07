@@ -206,36 +206,61 @@ class USB6281(object):
         # get obj
         fig = self._ax.figure
 
-        # update data
+        # update data indexes
         i = self._nbuffers_read*self._len_buffer
-        i_start = max(i-self._ydata.shape[1], 0)
 
-        # get data to copy, filter, and downsample
-        data = self._filter(self._data)
-        data = data[:, i_start:i:self._downsample]
+        if self.do_filter:
+            i_start = max(i//self.do_filter-self._ydata.shape[1], 0)
+        else:
+            i_start = max(i-self._ydata.shape[1], 0)
 
-        try:
-            # copy data
+        # get data to copy, trim, filter
+        data = self._filter(self._data[:, :i])
+
+        # downsample only if filtering, then copy
+        if self.do_filter:
+            data = data[:, ::self._downsample]
+            data = data[:, i_start:]
+            self._ydata[:, i_start-i//self._downsample:] = data
+        else:
+            data = data[:, i_start:]
             self._ydata[:, i_start-i:] = data
 
-        # assumed reason for error is that we're at end of data array
-        except ValueError:
-            len_to_add = len((data)[0])
-            self._ydata[:, -len_to_add:] = data
+        # copy data
+        # self._ydata[:, i_start-i:] = data
 
         # set data
         for y, line in zip(self._ydata, self._ax.lines):
             line.set_ydata(y)
 
-        # set limits
-        self._ax.set_ylim((np.min(self._ydata), np.max(self._ydata)))
+        # set limits not too frequently
+        ylim_low = np.min(self._ydata)
+        ylim = self._ax.get_ylim()
+        if not (ylim_low < ylim[0] or ylim_low > ylim[0] + abs(ylim[0])* 0.1):
+            ylim_low = ylim[0]
+        else:
+            ylim_low *= 0.99
+
+        ylim_high = np.max(self._ydata)
+        if not (ylim_high > ylim[1] or ylim_high < ylim[1] - abs(ylim[1])* 0.1):
+            ylim_high = ylim[1]
+        else:
+            ylim_high *= 1.01
+
+        if ylim_low == ylim_high:
+            ylim_low *= 0.99
+            ylim_high *= 1.01
+
+        self._ax.set_ylim((ylim_low, ylim_high))
 
         # update canvas
         try:
             fig.canvas.draw()
             fig.canvas.flush_events()
         except RuntimeError:
-            pass
+            self.close()
+            return True
+        return False
 
     def _make_signal_generator(self, fn_handle):
         """Makes a function which yields voltages for each of the analog output channels
@@ -338,10 +363,12 @@ class USB6281(object):
 
     def close(self):
         """Close tasks"""
+        self._taski.stop()
         self._taski.close()
+        self._tasko.stop()
         self._tasko.close()
 
-    def draw_data(self, cols=None, filter=False, downsample=False, **df_plot_kw):
+    def draw_data(self, cols=None, do_filter=False, do_downsample=False, **df_plot_kw):
         """Draw data in axis
 
         Args:
@@ -356,18 +383,18 @@ class USB6281(object):
         df = self.df.copy()
 
         # filter
-        if filter:
+        if do_filter:
             for c in df.columns:
-                df.loc[:, c] = self.filter(df.loc[:, c])
+                df[c] = self._filter(df[c])
 
         # downsample
-        if downsample:
-
+        if do_downsample:
+            df = df.loc[::self._downsample]
 
         if cols is not None:
-            self.df[cols].plot(**df_plot_kw)
+            df[cols].plot(**df_plot_kw)
         else:
-            self.df.plot(**df_plot_kw)
+            df.plot(**df_plot_kw)
 
         # plot elements
         plt.xlabel('Time (s)')
@@ -454,6 +481,7 @@ class USB6281(object):
         # length after downsample (only if not filtering)
         if self.do_filter:
             self._len_buffer = int(np.ceil(self._samples_per_channel))
+
         else:
             self._len_buffer = int(np.ceil(self._samples_per_channel / self._downsample))
 
@@ -531,24 +559,19 @@ class USB6281(object):
 
                 # update figure
                 if self._draw_s > 0 and self._nbuffers_read > nbuffers_read:
-                    self._draw_in_progress()
+                    if self._draw_in_progress():
+                        break
                     nbuffers_read = self._nbuffers_read
 
         # if error, close task nicely
         except Exception as err:
-            self._taski.stop()
-            self._taski.close()
-            self._tasko.stop()
-            self._tasko.close()
+            self.close()
             raise err from None
 
         # set output to zero and stop task
         for _ in range(self._frames_per_buffer):
             self._stream_out.write_many_sample(np.zeros((self._len_ao, self._samples_per_frame)), timeout=1)
-        self._taski.stop()
-        self._taski.close()
-        self._tasko.stop()
-        self._tasko.close()
+        self.close()
 
         # reassign data to dataframe
         self.df = pd.DataFrame({f'ai{ch}':self._data[i] for i, ch in enumerate(self.ai.keys())})
