@@ -93,86 +93,6 @@ class USB6281(object):
         # timesteps from t=0 for output functions
         self._timebase_ao = np.arange(self._samples_per_frame, dtype=np.float64) / self._clock_freq
 
-    def setup(self, ao = None, ai = None):
-        """Set up channels for input and output
-
-        Args:
-            ao (dict): connections to analog outputs. Format as ch:(function_handle), where "ch" is an int starting from 0, and "function_handle" is a function handle of the format voltage = fn(time)
-            ai (dict): connections to analog inputs. Format as ch:connection, where "ch" is an int starting from 0, and "connection" is a label specifying what the channel is connected to.
-        Returns:
-            None
-        """
-
-        # set channels
-        self.ai = ai
-        self.ao = ao
-
-        # must always read back at least one channel
-        if self.ai is None:
-            self.ai = {0: 'default readback'}
-
-        # must always output one channel
-        if self.ao is None:
-            self.ao = {0: lambda x: 0}
-
-        # setup output tasks -----------------------------------------------
-
-        # number of channels
-        self._len_ai = len(self.ai.keys())
-
-        # task
-        self._taski = ni.Task()
-
-        # setup channels
-        for ch in self.ai.keys():
-            self._taski.ai_channels.add_ai_voltage_chan(f"{self._device_name}/ai{ch}",
-                                                       **self._ai_args )
-
-        # set terminal configuation
-        self._taski.ai_channels.all.ai_term_cfg = self._terminal_config
-
-        # setup clocks
-        self._taski.timing.cfg_samp_clk_timing(rate = self._clock_freq,
-                                     source = f'/{self._device_name}/ao/SampleClock',
-                                     sample_mode = ni.constants.AcquisitionType.CONTINUOUS,
-                                     samps_per_chan = self._samples_per_channel)
-
-        # get stream
-        self._stream_in = stream_readers.AnalogMultiChannelReader(self._taski.in_stream)
-
-        # setup reading callback
-        # read data when n samples are placed into the buffer
-        self._taski.register_every_n_samples_acquired_into_buffer_event(self._samples_per_channel,
-                                                                        self._read_task_callback)
-
-        # setup output tasks -----------------------------------------------
-
-        # number of channels
-        self._len_ao = len(self.ao.keys())
-
-        # task
-        self._tasko = ni.Task()
-
-        # setup channels
-        for ch in self.ao.keys():
-            self._tasko.ao_channels.add_ao_voltage_chan(f"{self._device_name}/ao{ch}",
-                                                   **self._ao_args)
-
-        # clock
-        self._tasko.timing.cfg_samp_clk_timing(rate = self._clock_freq,
-                                     sample_mode = ni.constants.AcquisitionType.CONTINUOUS,
-                                     samps_per_chan = self._samples_per_channel)
-
-        # stream
-        self._stream_out = stream_writers.AnalogMultiChannelWriter(self._tasko.out_stream)
-
-        # setup output buffer
-        self._tasko.out_stream.output_buf_size = self._clock_freq
-
-        # setup output callback
-        self._tasko.register_every_n_samples_transferred_from_buffer_event(self._samples_per_frame,
-                                                                           self._write_task_callback)
-
     def __enter__(self):
         return self
 
@@ -565,7 +485,7 @@ class USB6281(object):
         self.close()
 
         # reassign data to dataframe
-        self.df = pd.DataFrame({f'ai{ch}':self._data[i] for i, ch in enumerate(self.ai.keys())})
+        self.df = pd.DataFrame({chname:self._data[i] for i, chname in enumerate(self.ai.values())})
         self.df.index /= sample_freq
         self.df.index.name = 'time (s)'
 
@@ -609,6 +529,86 @@ class USB6281(object):
         # set filter (applied as y = sosfilt(sos, y))
         self.signal_filters.append(butter(order, Wn, btype=filter_type, analog=False, output='sos'))
         self.do_filter = True
+
+    def setup(self, ao = None, ai = None):
+        """Set up channels for input and output
+
+        Args:
+            ao (dict): connections to analog outputs. Format as ch:(function_handle), where "ch" is an int starting from 0, and "function_handle" is a function handle of the format voltage = fn(time)
+            ai (dict): connections to analog inputs. Format as ch:connection, where "ch" is an int starting from 0, and "connection" is a label specifying what the channel is connected to.
+        Returns:
+            None
+        """
+
+        # set channels
+        self.ai = ai
+        self.ao = ao
+
+        # must always read back at least one channel
+        if self.ai is None:
+            self.ai = {0: 'default readback'}
+
+        # must always output one channel
+        if self.ao is None:
+            self.ao = {0: lambda x: 0}
+
+        # setup output tasks -----------------------------------------------
+
+        # number of channels
+        self._len_ai = len(self.ai.keys())
+
+        # task
+        self._taski = ni.Task()
+
+        # setup channels
+        for ch in self.ai.keys():
+            self._taski.ai_channels.add_ai_voltage_chan(f"{self._device_name}/ai{ch}",
+                                                       **self._ai_args )
+
+        # set terminal configuation
+        self._taski.ai_channels.all.ai_term_cfg = self._terminal_config
+
+        # setup clocks
+        self._taski.timing.cfg_samp_clk_timing(rate = self._clock_freq,
+                                     source = f'/{self._device_name}/ao/SampleClock',
+                                     sample_mode = ni.constants.AcquisitionType.CONTINUOUS,
+                                     samps_per_chan = self._samples_per_channel)
+
+        # get stream
+        self._stream_in = stream_readers.AnalogMultiChannelReader(self._taski.in_stream)
+
+        # setup reading callback
+        # read data when n samples are placed into the buffer
+        self._taski.register_every_n_samples_acquired_into_buffer_event(self._samples_per_channel,
+                                                                        self._read_task_callback)
+
+        # setup output tasks -----------------------------------------------
+
+        # number of channels
+        self._len_ao = len(self.ao.keys())
+
+        # task
+        self._tasko = ni.Task()
+
+        # setup channels
+        for ch in self.ao.keys():
+            self._tasko.ao_channels.add_ao_voltage_chan(f"{self._device_name}/ao{ch}",
+                                                   **self._ao_args)
+
+        # clock
+        self._tasko.timing.cfg_samp_clk_timing(rate = self._clock_freq,
+                                     sample_mode = ni.constants.AcquisitionType.CONTINUOUS,
+                                     samps_per_chan = self._samples_per_channel)
+
+        # stream
+        self._stream_out = stream_writers.AnalogMultiChannelWriter(self._tasko.out_stream)
+
+        # setup output buffer
+        self._tasko.out_stream.output_buf_size = self._clock_freq
+
+        # setup output callback
+        self._tasko.register_every_n_samples_transferred_from_buffer_event(self._samples_per_frame,
+                                                                           self._write_task_callback)
 
     def to_csv(self, path=None, do_filtering=True, do_downsample=True, **notes):
         """Write data to file specified by path
