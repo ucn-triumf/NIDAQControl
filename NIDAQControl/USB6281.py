@@ -12,7 +12,7 @@ import nidaqmx as ni
 from tqdm import tqdm, TqdmWarning
 from datetime import datetime
 from scipy.signal import butter, sosfiltfilt
-import os, time
+import os, time, __main__
 
 from nidaqmx import stream_readers
 from nidaqmx import stream_writers
@@ -610,14 +610,14 @@ class USB6281(object):
         self._tasko.register_every_n_samples_transferred_from_buffer_event(self._samples_per_frame,
                                                                            self._write_task_callback)
 
-    def to_csv(self, path=None, do_filtering=True, do_downsample=True, **notes):
+    def to_csv(self, path=None, do_filtering=True, do_downsample=True, header=None):
         """Write data to file specified by path
 
         Args:
             path (str): if None, generate default filename (nidaq_usb6281_yymmddThhmmss.csv), else write csv to this path
             do_filter (bool): if true, if there is a filter, then apply it before saving
             do_downsample (bool): if true, apply downsampling before saving (if no filtering, this option forced True)
-            notes: kwargs to write to file header, but takes general input. Saves as key: value in csv file header
+            header (str): header string. Note that file written and datetime are appended. Use "#" as comment indicator
 
         Returns:
             None, writes to file
@@ -644,22 +644,17 @@ class USB6281(object):
         path = os.path.abspath(path + '.csv')
 
         # format physical notes
-        if notes:
-            header_notes = ['# Notes:']
-            string_len = max([len(s) for s in notes.keys()]) + 2
-            header_notes.extend([f'#    {key:{string_len}}: {value}' for key, value in notes.items()])
-        else:
-            header_notes = []
+        if header is None:
+            header = ''
 
         try:
-            __file__
+            thisfile = __main__.__file__
         except NameError:
-            __file__ = 'USB6281.py'
+            thisfile = 'USB6281.py'
 
         # header lines
-        header = [  *header_notes,
-                    '#',
-                    f'# File written by: {__file__}',
+        header = [  header.strip(),
+                    f'# File written by: {thisfile}',
                     f'# {str(datetime.now())}',
                     '# \n']
         with open(path, 'w') as fid:
@@ -669,7 +664,3 @@ class USB6281(object):
         data.to_csv(path, mode='a', index=True)
 
         print(f'\nSaved file as {path}')
-
-
-
-
