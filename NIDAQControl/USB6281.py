@@ -367,7 +367,7 @@ class USB6281(object):
 
         # save inputs
         self._save_ao = save_ao
-        self._draw_s = draw_s
+        self._draw_s = draw_s if draw_s > 0 else 0
 
         duration = int(duration)
 
