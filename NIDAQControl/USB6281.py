@@ -143,7 +143,7 @@ class USB6281(object):
 
         # broadcast fails for data not even multiple of downsampled array
         except ValueError:
-            n = len(data[:, i_start::downsmpl])
+            n = len(data[0, i_start::downsmpl])
             self._ydata[:, -n:] = data[:, i_start::downsmpl]
 
         # set data
