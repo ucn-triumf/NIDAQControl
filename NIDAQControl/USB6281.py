@@ -138,7 +138,13 @@ class USB6281(object):
 
         # get data to copy, trim, filter
         data = self._filter(self._data[:, :i])
-        self._ydata[:, (i_start-i)//downsmpl:] = data[:, i_start::downsmpl]
+        try:
+            self._ydata[:, (i_start-i)//downsmpl:] = data[:, i_start::downsmpl]
+
+        # broadcast fails for data not even multiple of downsampled array
+        except ValueError:
+            n = len(data[:, i_start::downsmpl])
+            self._ydata[:, -n:] = data[:, i_start::downsmpl]
 
         # set data
         for y, line in zip(self._ydata, self._ax.lines):
