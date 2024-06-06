@@ -215,15 +215,22 @@ class USB6281(object):
                                         timeout=ni.constants.WAIT_INFINITELY)
 
         # downsample buffer only if not filtering
+        n = len(self._buffer_in)
+        times = np.arange(n) + self._total_pts
+        self._total_pts += n
+
         if self.do_filter:
             buffer_down = self._buffer_in
+
         else:
+            times = times[::self._downsample]
             buffer_down = self._buffer_in[:, ::self._downsample]
 
         # save data
         i = self._nbuffers_read
         try:
             self._data[:, i*self._len_buffer:(i+1)*self._len_buffer] = buffer_down
+            self._time[i*self._len_buffer:(i+1)*self._len_buffer] = times
 
         # at end of storage array
         except ValueError as err:
@@ -410,7 +417,9 @@ class USB6281(object):
 
         # data to save from ai, final output
         self._data = np.zeros((self._len_ai, total_len))-1111 # -1111 to easily detect default fill data
+        self._times = np.zeros((total_len))-1111 # -1111 to easily detect default fill data
         self._nbuffers_read = 0  # number of buffers read out
+        self._total_pts = 0 # number of points read before downsample
 
         # number of points to draw
         ndraw = self._draw_s*sample_freq
@@ -480,13 +489,15 @@ class USB6281(object):
             raise err from None
 
         # set output to zero and stop task
+        zeros = np.zeros((self.ni._len_ao, self.ni._samples_per_frame))
         for _ in range(self._frames_per_buffer):
-            self._stream_out.write_many_sample(np.zeros((self._len_ao, self._samples_per_frame)), timeout=1)
+            self._stream_out.write_many_sample(zeros, timeout=1)
         self.close()
 
         # reassign data to dataframe
-        self.df = pd.DataFrame({chname:self._data[i] for i, chname in enumerate(self.ai.values())})
-        self.df.index /= sample_freq
+        self.df = pd.DataFrame({chname:self._data[i] for i, chname in enumerate(self.ai.values())},
+                               index=self._time)
+        self.df.index /= self._clock_freq
         self.df.index.name = 'time (s)'
 
     def set_filter(self, low=None, high=None, order=6, bandstop=False):
