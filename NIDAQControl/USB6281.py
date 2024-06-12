@@ -221,9 +221,8 @@ class USB6281(object):
                                         timeout=ni.constants.WAIT_INFINITELY)
 
         # downsample buffer only if not filtering
-        n = len(self._buffer_in)
-        times = np.arange(n) + self._total_pts
-        self._total_pts += n
+        times = np.arange(self._len_buffer) + self._total_pts
+        self._total_pts += self._len_buffer
 
         if self.do_filter:
             buffer_down = self._buffer_in
@@ -495,7 +494,7 @@ class USB6281(object):
 
         # data to save from ai, final output
         self._data = np.zeros((self._len_ai, total_len))-1111 # -1111 to easily detect default fill data
-        self._times = np.zeros((total_len))-1111 # -1111 to easily detect default fill data
+        self._time = np.zeros((total_len))-1111 # -1111 to easily detect default fill data
         self._nbuffers_read = 0  # number of buffers read out
         self._total_pts = 0 # number of points read before downsample
 
@@ -567,7 +566,7 @@ class USB6281(object):
             raise err from None
 
         # set output to zero and stop task
-        zeros = np.zeros((self.ni._len_ao, self.ni._samples_per_frame))
+        zeros = np.zeros((self._len_ao, self._samples_per_frame))
         for _ in range(self._frames_per_buffer):
             self._stream_out.write_many_sample(zeros, timeout=1)
         self.close()
