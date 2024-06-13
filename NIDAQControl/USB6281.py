@@ -221,8 +221,8 @@ class USB6281(object):
                                         timeout=ni.constants.WAIT_INFINITELY)
 
         # downsample buffer only if not filtering
-        times = np.arange(self._len_buffer) + self._total_pts
-        self._total_pts += self._len_buffer
+        times = np.arange(self._samples_per_channel) + self._total_pts
+        self._total_pts += self._samples_per_channel
 
         if self.do_filter:
             buffer_down = self._buffer_in
@@ -574,6 +574,8 @@ class USB6281(object):
         # reassign data to dataframe
         self.df = pd.DataFrame({chname:self._data[i] for i, chname in enumerate(self.ai.values())},
                                index=self._time)
+        print(self._time)
+        print(self._clock_freq)
         self.df.index /= self._clock_freq
         self.df.index.name = 'time (s)'
 
