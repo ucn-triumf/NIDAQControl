@@ -9,4 +9,5 @@
 
 ## Modules
 
+- [Relay](./Relay.md)
 - [Usb6281](./USB6281.md)

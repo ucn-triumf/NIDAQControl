@@ -182,7 +182,6 @@ class USB6281(object):
         Returns:
             iterator: function which yields voltage output values
         """
-
         # track phase in time domain
         phase = 0
         phase_step = self._samples_per_frame/self._clock_freq
