@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "NIDAQControl"
-version = '0.3.1'
+version = '0.3.2'
 authors  = [{name="Derek Fujimoto", email="dfujimoto@triumf.ca" }]
 description = "Python API for NIDAQ devices used by the TUCAN collaboration."
 readme = "README.md"
