@@ -151,19 +151,25 @@ class USB6281(object):
         for y, line in zip(self._ydata, self._ax.lines):
             line.set_ydata(y)
 
-        # set limits not too frequently
+        # # set limits not too frequently
         ylim_low = np.min(self._ydata)
         ylim = self._ax.get_ylim()
         if not (ylim_low < ylim[0] or ylim_low > ylim[0] + abs(ylim[0]) * 0.1):
             ylim_low = ylim[0]
         else:
-            ylim_low *= 0.9
+            if ylim_low > 0:
+                ylim_low *= 0.9
+            else:
+                ylim_low *= 1.1
 
         ylim_high = np.max(self._ydata)
         if not (ylim_high > ylim[1] or ylim_high < ylim[1] - abs(ylim[1]) * 0.1):
             ylim_high = ylim[1]
         else:
-            ylim_high *= 1.1
+            if ylim_high > 0:
+                ylim_high *= 1.1
+            else:
+                ylim_high *= 0.9
 
         self._ax.set_ylim((ylim_low, ylim_high))
 
@@ -349,13 +355,17 @@ class USB6281(object):
 
     def close(self):
         """Close tasks"""
-        if hasattr(self, '_taski'):
+        try:
             self._taski.stop()
             self._taski.close()
+        except ni.DaqError:
+            pass
 
-        if hasattr(self, '_tasko'):
+        try:
             self._tasko.stop()
             self._tasko.close()
+        except ni.DaqError:
+            pass
 
     def draw_data(self, cols=None, do_filter=True, do_downsample=True, **df_plot_kw):
         """Draw data in axis
