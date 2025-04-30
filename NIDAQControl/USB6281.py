@@ -79,7 +79,8 @@ class USB6281(object):
         self._device_name = device_name
         self._clock_freq = int(clock_freq)
         self._samples_per_channel = int(samples_per_channel)
-        self._terminal_config = getattr(ni.constants.TerminalConfiguration, terminal_config)
+        self._terminal_config = getattr(ni.constants.TerminalConfiguration,
+                                        terminal_config)
 
         # samples per frame
         self._samples_per_frame = self._clock_freq // self._frames_per_buffer
@@ -195,7 +196,6 @@ class USB6281(object):
             # handle single value return types
             if type(output) in (int, float, np.float64):
                 output = np.full(self._timebase_ao.shape, output, dtype=np.float64)
-
             yield output
             phase += phase_step
 
@@ -220,9 +220,8 @@ class USB6281(object):
                                         timeout=ni.constants.WAIT_INFINITELY)
 
         # downsample buffer only if not filtering
-        n = len(self._buffer_in)
-        times = np.arange(n) + self._total_pts
-        self._total_pts += n
+        times = np.arange(self._samples_per_channel) + self._total_pts
+        self._total_pts += self._samples_per_channel
 
         if self.do_filter:
             buffer_down = self._buffer_in
@@ -254,7 +253,7 @@ class USB6281(object):
 
         # must always read back at least one channel
         if self.ai is None:
-            self.ai = {0: 'default readback'}
+            self.ai = {0: 'ai0'}
 
         # must always output one channel
         if self.ao is None:
@@ -300,7 +299,7 @@ class USB6281(object):
 
         # setup channels
         for ch in self.ao.keys():
-            self._tasko.ao_channels.add_ao_voltage_chan(f"{self._device_name}/ao{ch}",
+            self._tasko.ao_channels.add_ao_voltage_chan(f'{self._device_name}/ao{ch}',
                                                    **self._ao_args)
 
         # clock
@@ -313,6 +312,7 @@ class USB6281(object):
 
         # setup output buffer
         self._tasko.out_stream.output_buf_size = self._clock_freq
+        self._tasko.out_stream.regen_mode = ni.constants.RegenerationMode.DONT_ALLOW_REGENERATION
 
         # setup output callback
         self._tasko.register_every_n_samples_transferred_from_buffer_event(self._samples_per_frame,
@@ -349,10 +349,13 @@ class USB6281(object):
 
     def close(self):
         """Close tasks"""
-        self._taski.stop()
-        self._taski.close()
-        self._tasko.stop()
-        self._tasko.close()
+        if hasattr(self, '_taski'):
+            self._taski.stop()
+            self._taski.close()
+
+        if hasattr(self, '_tasko'):
+            self._tasko.stop()
+            self._tasko.close()
 
     def draw_data(self, cols=None, do_filter=True, do_downsample=True, **df_plot_kw):
         """Draw data in axis
@@ -494,7 +497,7 @@ class USB6281(object):
 
         # data to save from ai, final output
         self._data = np.zeros((self._len_ai, total_len))-1111 # -1111 to easily detect default fill data
-        self._times = np.zeros((total_len))-1111 # -1111 to easily detect default fill data
+        self._time = np.zeros((total_len))-1111 # -1111 to easily detect default fill data
         self._nbuffers_read = 0  # number of buffers read out
         self._total_pts = 0 # number of points read before downsample
 
@@ -539,7 +542,9 @@ class USB6281(object):
         time_start = time.time()
         dt = time_start - time.time()
         time_current = time_start
-        progress_bar = tqdm(total=duration, leave=False)
+
+        progress_bar = tqdm(total=duration, leave=False, unit_scale=True,
+                            miniters=1)
 
         # setup draw counter
         nbuffers_read = 0
@@ -551,7 +556,7 @@ class USB6281(object):
                 # progress
                 time_prev = time_current
                 time_current = time.time()
-                dt = time_current - time_prev
+                dt = float(f'{time_current - time_prev:.2f}')
                 progress_bar.update(dt)
 
                 # update figure
@@ -563,17 +568,20 @@ class USB6281(object):
         # if error, close task nicely
         except Exception as err:
             self.close()
+            progress_bar.close()
             raise err from None
 
+        progress_bar.close()
+
         # set output to zero and stop task
-        zeros = np.zeros((self.ni._len_ao, self.ni._samples_per_frame))
+        zeros = np.zeros((self._len_ao, self._samples_per_frame))
         for _ in range(self._frames_per_buffer):
             self._stream_out.write_many_sample(zeros, timeout=1)
         self.close()
 
         # reassign data to dataframe
-        self.df = pd.DataFrame({chname:self._data[i] for i, chname in enumerate(self.ai.values())},
-                               index=self._time)
+        self.df = pd.DataFrame({chname:self._data[i] for i, chname in enumerate(self.ai.values())}, index=self._time)
+
         self.df.index /= self._clock_freq
         self.df.index.name = 'time (s)'
 
